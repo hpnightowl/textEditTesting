@@ -1,0 +1,97 @@
+name: Monthly Release
+
+on:
+  schedule:
+    # Runs at 00:00 on the first day of every month
+    - cron: '0 0 1 * *'
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for changelog generation
+
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+
+      - name: Generate Changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v4
+        with:
+          configuration: |
+            {
+              "categories": [
+                {
+                  "title": "## 🚀 Features",
+                  "labels": ["feature", "enhancement"]
+                },
+                {
+                  "title": "## 🐛 Fixes",
+                  "labels": ["fix", "bug"]
+                },
+                {
+                  "title": "## 💬 Other",
+                  "labels": ["other"]
+                },
+                {
+                  "title": "## 📦 Dependencies",
+                  "labels": ["dependencies"]
+                }
+              ]
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Release Bundle
+        run: |
+          ./gradlew bundleRelease
+          mkdir -p artifacts
+          cp app/build/outputs/bundle/release/app-release.aab artifacts/
+          cp app/build/outputs/apk/release/app-release.apk artifacts/
+
+      - name: Get Version
+        id: get_version
+        run: |
+          echo "VERSION_NAME=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ env.VERSION_NAME }}
+          tag_name: v${{ env.VERSION_NAME }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          files: |
+            artifacts/app-release.aab
+            artifacts/app-release.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to GitHub Packages
+        run: |
+          ./gradlew publishReleasePublicationToGitHubPackagesRepository
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-release
+          path: artifacts/
+          retention-days: 30
