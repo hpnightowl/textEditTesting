@@ -71,5 +71,3 @@ The app displays a scrollable list of different text field implementations. Each
 - Based on the Android Open Source Project samples
 - Material 3 Design guidelines
 - Jetpack Compose documentation
-
-## Demo 
